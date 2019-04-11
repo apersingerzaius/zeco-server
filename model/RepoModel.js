@@ -1,16 +1,22 @@
-var testFile = require("../datasets/giothub_repo_sample.json");
-var config = require("../config/default.json");
-var fs = require('fs');
+const testFile = require("../datasets/giothub_repo_sample.json");
+const config = require("../config/default.json");
+const fs = require('fs');
+const fetch = require("node-fetch");
+const { URL, URLSearchParams } = require('url');
 
-var RepoModel = function(repo){
-  console.log(repo);
+const RepoModel = function(repo){
   this.version = repo.version;
 };
-
-var options = {
-  uri: 'https://api.github.com/orgs/zaiusinc/repos?page=1&per_page=100',
+let uri = null;
+const baseURL = 'https://api.github.com/orgs/zaiusinc/repos';
+let options = {
+  method: 'GET',
   qs: {
     access_token: config.token
+  },
+  page: {
+    page: 1,
+    per_page: 1
   },
   headers: {
     'User-Agent': 'Request-Promise',
@@ -19,10 +25,13 @@ var options = {
   json: true // Automatically parses the JSON string in the response
 };
 
+let nodes = [];
+let links = [];
+
 RepoModel.updateRepoList = function updateRepoList(result) {
   // start the github scrape...
-  console.log(options);
-  getRepos();
+  buildURI(baseURL);
+  getRepos(uri);
   result(null, 'This feature is not yet implemented!!!');
 };
 
@@ -36,44 +45,75 @@ RepoModel.getRepoList = function getRepoList(result) {
   });
 };
 
-function getRepos() {
+function getRepos(builtURI) {
   let r1 = "";
-  const parsed = parseResponse(testFile);
-  console.log(parsed);
-
-  writeContentToFile(parsed);
-  // await req(this.options)
-  //   .then(function (repos) {
-  //    const parsed = parseResponse(testFile);
-  //    console.log(parsed);
-  //    writeContentToFile(parsed);
-  //   })
-  //   .catch(function (err) {
-  //     console.log(err);
-  //   });
+  fetch(builtURI, options)
+    .then(function(res) { return res; })
+    .then(function(resJson) {
+      resJson.json()
+        .then(function(data) {
+          // console.log(data)
+          createNodesFromResponse(data);
+          for (let pair of resJson.headers.entries()) {
+            if(pair[0] == 'link') {
+              if(headerContainsNext(pair[1])) {
+                buildURI(baseURL, options.page.page);
+                getRepos(uri);
+                if(options.page.page % 10 == 1) {
+                  console.log(JSON.stringify(nodes));
+                }
+              }
+              if(!headerContainsLast(pair[1])) {
+                createLinksFromNodes();
+                writeContentToFile({nodes: nodes, links: links});
+                resetPage();
+                console.log(options);
+              }
+            }
+          }
+        })
+        .catch(function(e) {console.log('JSON ERROR!!!!'); console.log(e); });
+    })
+    .catch(function(e) {console.log('ERROR!!!!'); console.log(e); })
 };
 
-function parseResponse(testing) {
-  var nodes = [];
-  var links = [];
-  for(var i = 0; i < testing.length; i++) {
+function headerContainsNext(key) {
+  return (key.indexOf('next') > -1);
+}
+
+function headerContainsLast(key) {
+  return (key.indexOf('last') > -1);
+}
+
+function createNodesFromResponse(response) {
+  console.log(nodes.length);
+  for(var i = 0; i < response.length; i++) {
     nodes.push({
-      id: testing[i].name,
+      id: response[i].name,
       group: 2,
-      size: testing[i].size
+      size: response[i].size
     });
-    if(i > 1 && i <= testing.length) {
+  }
+}
+
+// this is a temporary function as the links will be
+// created using the scrape content function
+function createLinksFromNodes() {
+  console.log('LINKS: (nodes.length) '+nodes.length);
+  for(var i = 0; i < nodes.length; i++) {
+    if(i > 0 && i <= nodes.length) {
       links.push({
-        source: testing[i-1].name,
-        target: testing[i].name,
+        source: nodes[i-1].id,
+        target: nodes[i].id,
         value: 4
       });
     }
   }
-  return {nodes: nodes, links: links};
-};
+}
 
 function writeContentToFile(content) {
+  console.log('writing content...');
+  console.log(content);
   fs.writeFile("./datasets/repos.json", JSON.stringify(content), (err) => {
     if (err) {
       console.error(err);
@@ -81,6 +121,24 @@ function writeContentToFile(content) {
     };
     console.log("File has been created");
   });
+}
+
+function buildURI(baseURL, page = 1) {
+  uri = new URL(baseURL);
+  uri.search = new URLSearchParams({
+    page: page,
+    per_page: options.page.per_page,
+    access_token: options.qs.access_token
+  });
+  incrementPage();
+}
+
+function incrementPage() {
+  options.page.page += 1;
+}
+
+function resetPage() {
+  options.page.page = 1;
 }
 
 module.exports = RepoModel;
