@@ -1,0 +1,20 @@
+{
+  "jumbe": {
+    "name": "jumbe",
+    "alias": [],
+    "connection_string": "jumbe.zaius.com",
+    "port": ""
+  },
+  "kafka-rb": {
+    "name": "kafka-rb",
+    "alias": [],
+    "connection_string": "",
+    "port": ""
+  },
+  "kafka-zaius": {
+    "name": "kafka-zaius",
+    "alias": ["kafka"],
+    "connection_string": "kafka-rest-edge-nova",
+    "port": "8082"
+  }
+}
