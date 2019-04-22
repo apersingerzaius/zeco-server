@@ -14,21 +14,28 @@
  *  - If API call, search for a specific port?
  *
  **/
-import data from '../strategies/strategies.json';
-
 
 export class LinkRules {
-  private _jsonRules: JSON;
+  private _jsonRules: any;
   private _content: string;
+  private _projectName: string;
+  private _downloadURL: string;
 
-  constructor(content: string) {
-    this._jsonRules = data;
+  constructor(content: string, projectName: string, dwnldURL: string, updatedStrategies?: any, ) {
+    this._jsonRules = updatedStrategies;
     this.content = content
+    this._projectName = projectName
+    this._downloadURL = dwnldURL
   }
 
-  private startScrape(): void {
-    console.log(this.content);
-    console.log(this._jsonRules)
+  public scrapeFilesContents(): void {
+    console.log(this._projectName + ' | ' + this._downloadURL);
+    this._jsonRules.forEach(function(obj) {
+      if(obj.name !== this._projectName) {
+        let anything = this.content.indexOf(obj.name);
+        console.log('Find ' + obj.name + '? ' + anything);
+      }
+    });
   }
 
   set content(newContent: string) {

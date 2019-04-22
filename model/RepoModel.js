@@ -1,7 +1,9 @@
+const {LinkRules} = require('../utilities/link_rules.ts');
 const config = require("../config/default.json");
 const fs = require('fs');
 const fetch = require("node-fetch");
 const { URL, URLSearchParams } = require('url');
+const strategies = require('../strategies/strategies.json');
 
 const RepoModel = function(repo){
   this.version = repo.version;
@@ -79,19 +81,15 @@ function getRepos(builtURI) {
  * This is the entry point for determining which files need to be extracted for
  * scraping
  *
+ * Stops after the first project
+ *
  * @param directoryString
  */
 function startScrape(directoryString = '') {
   //get the first node
   const sourceNode = nodes[0];
-  const limit = 1;
-  console.log('START SCRAPE')
-  console.log('----------------------------------------------------');
-  console.log(sourceNode.id + ' | ' + directoryString);
   buildURIForContentScrape(sourceNode.id, directoryString)
-  console.log(uri.href);
-  console.log('----------------------------------------------------');
-  getContentRoot(uri);
+  getContentRoot(uri, sourceNode.id);
 }
 
 /**
@@ -101,21 +99,9 @@ function startScrape(directoryString = '') {
  *
  * @param contentURI
  */
-function getContentRoot(contentURI) {
+function getContentRoot(contentURI, projectName) {
   const currLength = directorySearchArray.length;
   const currDir = directorySearchArray[0];
-  // const testURI = contentURI + (currLength > 0 ? directorySearchArray[0].directory_string : '');
-  // console.log('GET CONTENT ROOT => ENTER LINES')
-  // console.log(`Curr length: ${currLength}`);
-  // console.log('---------------Dir Array----------------');
-  // console.log(directorySearchArray);
-  // console.log('--------------Alrdy Srchd---------------');
-  // console.log(alreadySearchedDirs);
-  // if(currLength > 0) {
-  //   console.log(directorySearchArray[0]);
-  // }
-  // console.log(contentURI.href);
-  // console.log('----------------------------------------------------');
   fetch(contentURI)
     .then(function(res) { return res; })
     .then(function(resJson) {
@@ -129,8 +115,10 @@ function getContentRoot(contentURI) {
           if(directorySearchArray.length > 0) {
             startScrape(directorySearchArray[0])
           } else {
-            console.log('--------------Files to Srchd---------------');
-            console.log(fileSearchArray);
+            // once we are here, we'll need to either search the other projects
+            // or look at the current projects' files
+            // Currently - I'm for the latter
+            startFileContentDownload(projectName);
           }
           // getContentRoot(contentURI);
         })
@@ -140,9 +128,7 @@ function getContentRoot(contentURI) {
 }
 
 function buildArraysForContentSearching(data) {
-  const length = data.length;
   let foundDir = false;
-  console.log("Array length: " + length);
   for (let something of data) {
     if(something.type === 'file') {
       fileSearchArray.push({name: something.name, download_url: something.download_url})
@@ -152,28 +138,53 @@ function buildArraysForContentSearching(data) {
       if(!isAlreadySearched) {
         directorySearchArray.unshift(something.path);
       }
-      // directorySearchArray.push({directory_string: something.path});
     }
   }
   return foundDir;
 }
 
-function scrapeRepoContent() {
-  //get the first node
-  const sourceNode = nodes[0];
-  const limit = 1;
-  const contentURI = buildURIForContentScrape()
-  fetch(builtURI, options)
-    .then(function(res) { return res; })
-    .then(function(resJson) {
-      resJson.json()
-        .then(function(data) {
-          console.log(data)
-        })
-        .catch(function(e) {console.log('JSON ERROR!!!!'); console.log(e); });
-    })
-    .catch(function(e) {console.log('ERROR!!!!'); console.log(e); })
-};
+/**
+ * Starting point to kick off the file download + scrape
+ * First update strategies with any new projects
+ */
+function startFileContentDownload(projectName) {
+  updateStrategies();
+  fileSearchArray.forEach((obj, idx)=>{
+    fetch(obj.download_url)
+      .then(function(res) {
+        return res;
+      })
+      .then(function(resJson) {
+        resJson.text()
+          .then(function(data) {
+            const lr = new LinkRules(data, projectName, obj.download_url, strategies);
+            lr.scrapeFilesContents();
+          })
+      })
+      .catch(function(e) {
+        console.log('ERROR!!!!');
+        console.log(e);
+      })
+  });
+}
+
+function updateStrategies() {
+  console.log('Update strats?');
+  nodes.forEach((node) => {
+    const found = strategies.find((s) => {
+      return s.name === node.id
+    });
+    if(!found) {
+      strategies.push({
+        name: node.id,
+        alias: [],
+        connection_string: "",
+        port: ""
+      });
+    }
+  });
+  console.log(strategies);
+}
 
 function headerContainsNext(key) {
   return (key.indexOf('next') > -1);

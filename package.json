@@ -1,5 +1,5 @@
 {
-  "name": "zc-server",
+  "name": "zeco-server",
   "version": "1.0.0",
   "description": "server for zaiusconnections",
   "main": "index.js",
